@@ -35,7 +35,6 @@ def arrayToGeometryPoint(a):
     result.z = a[2]
     return result
 
-
 class TimeHelper:
     """
     Object containing all time-related functionality.
@@ -90,7 +89,6 @@ class TimeHelper:
         """Return True if the script should abort, e.g. from Ctrl-C."""
         return not rclpy.ok()
 
-
 class Crazyflie:
     """
     Object representing a single robot.
@@ -98,7 +96,7 @@ class Crazyflie:
     The bulk of the module's functionality is contained in this class.
     """
 
-    def __init__(self, node, cfname, paramTypeDict):
+    def __init__(self, node, cfname, paramTypeDict, tf_buffer):
         """
         Construct Crazyflie.
 
@@ -108,51 +106,71 @@ class Crazyflie:
             paramTypeDict: dictionary of the parameter types.
 
         """
-        prefix = '/' + cfname
-        self.prefix = prefix
+        self.prefix = '/' + cfname
+        self.tf_frame_name = cfname
         self.node = node
+        
+        self.tf_buffer = tf_buffer
+        
+        SERVICE_TIMEOUT = 10.0
+        
+        self.emergencyService = node.create_client(Empty, self.prefix + '/emergency')
+        if not self.emergencyService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"Emergency service timeout for {self.prefix}")
+        # self.emergencyService.wait_for_service(timeout_sec=10.0)
 
-        # self.tf = tf
+        self.takeoffService = node.create_client(Takeoff, self.prefix + '/takeoff')
+        if not self.takeoffService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"Takeoff service timeout for {self.prefix}")
+        # self.takeoffService.wait_for_service(timeout_sec=10.0)
 
-        self.emergencyService = node.create_client(Empty, prefix + '/emergency')
-        self.emergencyService.wait_for_service()
-        self.takeoffService = node.create_client(Takeoff, prefix + '/takeoff')
-        self.takeoffService.wait_for_service()
-        self.landService = node.create_client(Land, prefix + '/land')
-        self.landService.wait_for_service()
-        # # rospy.wait_for_service(prefix + '/stop')
-        # # self.stopService = rospy.ServiceProxy(prefix + '/stop', Stop)
-        self.goToService = node.create_client(GoTo, prefix + '/go_to')
-        self.goToService.wait_for_service()
-        self.uploadTrajectoryService = node.create_client(
-            UploadTrajectory, prefix + '/upload_trajectory')
-        self.uploadTrajectoryService.wait_for_service()
-        self.startTrajectoryService = node.create_client(
-            StartTrajectory, prefix + '/start_trajectory')
-        self.startTrajectoryService.wait_for_service()
-        self.notifySetpointsStopService = node.create_client(
-            NotifySetpointsStop, prefix + '/notify_setpoints_stop')
-        self.notifySetpointsStopService.wait_for_service()
-        self.armService = node.create_client(
-            Arm, prefix + '/arm')
-        # self.armService.wait_for_service()
-        self.setParamsService = node.create_client(
-            SetParameters, '/crazyflie_server/set_parameters')
-        self.setParamsService.wait_for_service()
-        self.statusSubscriber = node.create_subscription(
-            Status, f'{self.prefix}/status', self.status_topic_callback, 10)
+        self.landService = node.create_client(Land, self.prefix + '/land')
+        if not self.landService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"Land service timeout for {self.prefix}")
+        # self.landService.wait_for_service(timeout_sec=10.0)
+
+        self.goToService = node.create_client(GoTo, self.prefix + '/go_to')
+        if not self.goToService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"GoTo service timeout for {self.prefix}")
+        # self.goToService.wait_for_service(timeout_sec=10.0)
+        
+        self.startTrajectoryService = node.create_client(StartTrajectory, self.prefix + '/start_trajectory')
+        if not self.startTrajectoryService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"StartTrajectory service timeout for {self.prefix}")
+        # self.startTrajectoryService.wait_for_service(timeout_sec=10.0)
+
+        self.uploadTrajectoryService = node.create_client(UploadTrajectory, self.prefix + '/upload_trajectory')
+        if not self.uploadTrajectoryService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"UploadTrajectory service timeout for {self.prefix}")
+        # self.uploadTrajectoryService.wait_for_service(timeout_sec=10.0)
+        
+        self.notifySetpointsStopService = node.create_client(NotifySetpointsStop, self.prefix + '/notify_setpoints_stop')
+        if not self.notifySetpointsStopService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"NotifySetpoint service timeout for {self.prefix}")
+        # self.notifySetpointsStopService.wait_for_service(timeout_sec=10.0)
+
+        self.setParamsService = node.create_client(SetParameters, '/crazyflie_server/set_parameters')
+        if not self.setParamsService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"setParams service timeout for {self.prefix}")
+        # self.setParamsService.wait_for_service(timeout_sec=10.0)
+
+        self.armService = node.create_client(Arm, self.prefix + '/arm')
+        if not self.armService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"Arm service timeout for {prefix}")
+        # self.armService.wait_for_service(timeout_sec=10.0)
+
+        # rospy.wait_for_service(prefix + '/stop')
+        # self.stopService = rospy.ServiceProxy(prefix + '/stop', Stop)
+        
+        self.statusSubscriber = node.create_subscription(Status, f'{self.prefix}/status', self.status_topic_callback, 10)
         self.status = {}
 
-        self.poseStampedSubscriber = node.create_subscription(
-            PoseStamped, f'{self.prefix}/pose', self.poseStamped_topic_callback, 10)
-        self.poseStamped = {}
-        self.pose = {}
-        self.position = [0.0, 0.0, 0.0]
-
         # Query some settings
-        self.getParamsService = node.create_client(
-            GetParameters, '/crazyflie_server/get_parameters')
-        self.getParamsService.wait_for_service()
+        self.getParamsService = node.create_client(GetParameters, '/crazyflie_server/get_parameters')
+        if not self.getParamsService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            node.get_logger().warning(f"getParams service timeout for {self.prefix}")
+        # self.getParamsService.wait_for_service(timeout_sec=10.0)
+        
         req = GetParameters.Request()
         req.names = ['robots.{}.initial_position'.format(cfname), 'robots.{}.uri'.format(cfname)]
         future = self.getParamsService.call_async(req)
@@ -167,7 +185,6 @@ class Crazyflie:
                     self.initialPosition = np.array(response.values[0].double_array_value)
                 else:
                     assert False
-
                 # extract uri
                 self.uri = response.values[1].string_value
 
@@ -175,27 +192,25 @@ class Crazyflie:
 
         self.paramTypeDict = paramTypeDict
 
-        self.cmdFullStatePublisher = node.create_publisher(
-            FullState, prefix + '/cmd_full_state', 1)
-        self.cmdFullStateMsg = FullState()
-        self.cmdFullStateMsg.header.frame_id = '/world'
-
-        # self.cmdStopPublisher = rospy.Publisher(
-        #   prefix + '/cmd_stop', std_msgs.msg.Empty, queue_size=1)
-
-        # self.cmdVelPublisher = rospy.Publisher(
-        #   prefix + '/cmd_vel', geometry_msgs.msg.Twist, queue_size=1)
-
-        self.cmdPositionPublisher = node.create_publisher(
-            Position, prefix + '/cmd_position', 1)
-        self.cmdPositionMsg = Position()
-        self.cmdPositionMsg.header.frame_id = '/world'
-
-        # self.cmdVelocityWorldPublisher = rospy.Publisher(
-        #   prefix + '/cmd_velocity_world', VelocityWorld, queue_size=1)
+        self.cmdVelocityWorldPublisher = node.create_publisher(VelocityWorld, self.prefix + '/cmd_velocity_world', 1)
+        self.cmdVelocityWorldMsg = VelocityWorld()
+        self.cmdVelocityWorldMsg.header.frame_id = 'map'
+        # self.cmdVelocityWorldPublisher = rospy.Publisher(prefix + '/cmd_velocity_world', VelocityWorld, queue_size=1)
         # self.cmdVelocityWorldMsg = VelocityWorld()
         # self.cmdVelocityWorldMsg.header.seq = 0
         # self.cmdVelocityWorldMsg.header.frame_id = '/world'
+
+        self.cmdFullStatePublisher = node.create_publisher(FullState, self.prefix + '/cmd_full_state', 1)
+        self.cmdFullStateMsg = FullState()
+        self.cmdFullStateMsg.header.frame_id = '/world'
+
+        self.cmdPositionPublisher = node.create_publisher(Position, self.prefix + '/cmd_position', 1)
+        self.cmdPositionMsg = Position()
+        self.cmdPositionMsg.header.frame_id = '/world'
+
+        # self.cmdStopPublisher = rospy.Publisher(prefix + '/cmd_stop', std_msgs.msg.Empty, queue_size=1)
+
+        # self.cmdVelPublisher = rospy.Publisher(prefix + '/cmd_vel', geometry_msgs.msg.Twist, queue_size=1)
 
     def setGroupMask(self, groupMask):
         """
@@ -222,8 +237,7 @@ class Crazyflie:
                 membership status in each of the <= 8 possible groups.
 
         """
-        # Note that this requires a recent firmware; older firmware versions
-        #      do not have such a parameter.
+        # Note that this requires a recent firmware; older firmware versions do not have such a parameter.
         try:
             self.setParam('hlCommander.groupmask', groupMask)
         except KeyError:
@@ -491,22 +505,28 @@ class Crazyflie:
         req.arm = arm
         self.armService.call_async(req)
 
-    # def position(self):
-    #     """Returns the last true position measurement from motion capture.
+    def position(self):
+        """Returns the last true position measurement from motion capture.
 
-    #     If at least one position measurement for this robot has been received
-    #     from the motion capture system since startup, this function returns
-    #     immediately with the most recent measurement. However, if **no**
-    #     position measurements have been received, it blocks until the first
-    #     one arrives.
+        If at least one position measurement for this robot has been received
+        from the motion capture system since startup, this function returns
+        immediately with the most recent measurement. However, if **no**
+        position measurements have been received, it blocks until the first
+        one arrives.
 
-    #     Returns:
-    #         position (np.array[3]): Current position. Meters.
-    #     """
-    #     self.tf.waitForTransform(
-    #       '/world', '/cf' + str(self.id), rospy.Time(0), rospy.Duration(10))
-    #     position, quaternion = self.tf.lookupTransform(
-    #       '/world', '/cf' + str(self.id), rospy.Time(0))
+        Returns:
+            position (np.array[3]): Current position. Meters.
+        """
+        try:
+            trans = self.tf_buffer.lookup_transform('map', self.tf_frame_name, rclpy.time.Time(),
+            timeout=rclpy.duration.Duration(seconds=1.0))
+            point = trans.transform.translation
+            return np.array([point.x, point.y, point.z])
+        except Exception as e:
+            self.node.get_logger().warn(f'position(): TF lookup failed: {e}')
+            return np.array([np.nan, np.nan, np.nan])
+    #     self.tf.waitForTransform('/world', '/cf' + str(self.id), rospy.Time(0), rospy.Duration(10))
+    #     position, quaternion = self.tf.lookupTransform('/world', '/cf' + str(self.id), rospy.Time(0))
     #     return np.array(position)
 
     def getParam(self, name):
@@ -632,27 +652,33 @@ class Crazyflie:
         self.cmdFullStateMsg.twist.angular.z = omega[2]
         self.cmdFullStatePublisher.publish(self.cmdFullStateMsg)
 
-    # def cmdVelocityWorld(self, vel, yawRate):
-    #     """Sends a streaming velocity-world controller setpoint command.
+    def cmdVelocityWorld(self, vel, yawRate):
+        """Sends a streaming velocity-world controller setpoint command.
 
-    #     In this mode, the PC specifies desired velocity vector and yaw rate.
-    #     The onboard controller will try to achive this velocity.
+        In this mode, the PC specifies desired velocity vector and yaw rate.
+        The onboard controller will try to achive this velocity.
 
-    #     NOTE: the Mellinger controller is Crazyswarm's default controller, but
-    #     it has not been tuned (or even tested) for velocity control mode.
-    #     Switch to the PID controller by changing
-    #     `firmwareParams.stabilizer.controller` to `1` in your launch file.
+        NOTE: the Mellinger controller is Crazyswarm's default controller, but
+        it has not been tuned (or even tested) for velocity control mode.
+        Switch to the PID controller by changing
+        `firmwareParams.stabilizer.controller` to `1` in your launch file.
 
-    #     Sending a streaming setpoint of any type will force a change from
-    #     high-level to low-level command mode. Currently, there is no mechanism
-    #     to change back, but it is a high-priority feature to implement.
-    #     This means it is not possible to use e.g. :meth:`land()` or
-    #     :meth:`goTo()` after a streaming setpoint has been sent.
+        Sending a streaming setpoint of any type will force a change from
+        high-level to low-level command mode. Currently, there is no mechanism
+        to change back, but it is a high-priority feature to implement.
+        This means it is not possible to use e.g. :meth:`land()` or
+        :meth:`goTo()` after a streaming setpoint has been sent.
 
-    #     Args:
-    #         vel (array-like of float[3]): Velocity. Meters / second.
-    #         yawRate (float): Yaw angular velocity. Degrees / second.
-    #     """
+        Args:
+            vel (array-like of float[3]): Velocity. Meters / second.
+            yawRate (float): Yaw angular velocity. Degrees / second.
+        """
+        self.cmdVelocityWorldMsg.header.stamp = self.node.get_clock().now().to_msg()
+        self.cmdVelocityWorldMsg.vel.x = vel[0]
+        self.cmdVelocityWorldMsg.vel.y = vel[1]
+        self.cmdVelocityWorldMsg.vel.z = vel[2]
+        self.cmdVelocityWorldMsg.yaw_rate = yawRate
+        self.cmdVelocityWorldPublisher.publish(self.cmdVelocityWorldMsg)
     #     self.cmdVelocityWorldMsg.header.stamp = rospy.Time.now()
     #     self.cmdVelocityWorldMsg.header.seq += 1
     #     self.cmdVelocityWorldMsg.vel.x = vel[0]
@@ -661,14 +687,14 @@ class Crazyflie:
     #     self.cmdVelocityWorldMsg.yawRate = yawRate
     #     self.cmdVelocityWorldPublisher.publish(self.cmdVelocityWorldMsg)
 
-    # def cmdStop(self):
-    #     """Interrupts any high-level command to stop and cut motor power.
+    def cmdStop(self):
+        """Interrupts any high-level command to stop and cut motor power.
 
-    #     Intended for non-emergency scenarios, e.g. landing with the possibility
-    #     of taking off again later. Future low- or high-level commands will
-    #     restart the motors. Equivalent of :meth:`stop()` when in high-level mode.
-    #     """
-    #     self.cmdStopPublisher.publish(std_msgs.msg.Empty())
+        Intended for non-emergency scenarios, e.g. landing with the possibility
+        of taking off again later. Future low- or high-level commands will
+        restart the motors. Equivalent of :meth:`stop()` when in high-level mode.
+        """
+        self.cmdStopPublisher.publish(std_msgs.msg.Empty())
 
     # def cmdVel(self, roll, pitch, yawrate, thrust):
     #     """Sends a streaming command of the 'easy mode' manual control inputs.
@@ -728,28 +754,28 @@ class Crazyflie:
         self.cmdPositionMsg.yaw = yaw
         self.cmdPositionPublisher.publish(self.cmdPositionMsg)
 
-    # def setLEDColor(self, r, g, b):
-    #     """Sets the color of the LED ring deck.
+    def setLEDColor(self, r, g, b):
+        """Sets the color of the LED ring deck.
 
-    #     While most params (such as PID gains) only need to be set once, it is
-    #     common to change the LED ring color many times during a flight, e.g.
-    #     as some kind of status indicator. This method makes it convenient.
+        While most params (such as PID gains) only need to be set once, it is
+        common to change the LED ring color many times during a flight, e.g.
+        as some kind of status indicator. This method makes it convenient.
 
-    #     PRECONDITION: The param 'ring/effect' must be set to 7 (solid color)
-    #     for this command to have any effect. The default mode uses the ring
-    #     color to indicate radio connection quality.
+        PRECONDITION: The param 'ring/effect' must be set to 7 (solid color)
+        for this command to have any effect. The default mode uses the ring
+        color to indicate radio connection quality.
 
-    #     This is a blocking command, so it may cause stability problems for
-    #     large swarms and/or high-frequency changes.
+        This is a blocking command, so it may cause stability problems for
+        large swarms and/or high-frequency changes.
 
-    #     Args:
-    #         r (float): Red component of color, in range [0, 1].
-    #         g (float): Green component of color, in range [0, 1].
-    #         b (float): Blue component of color, in range [0, 1].
-    #     """
-    #     self.setParam('ring/solidRed', int(r * 255))
-    #     self.setParam('ring/solidGreen', int(g * 255))
-    #     self.setParam('ring/solidBlue', int(b * 255))
+        Args:
+            r (float): Red component of color, in range [0, 1].
+            g (float): Green component of color, in range [0, 1].
+            b (float): Blue component of color, in range [0, 1].
+        """
+        self.setParam('ring/solidRed', int(r * 255))
+        self.setParam('ring/solidGreen', int(g * 255))
+        self.setParam('ring/solidBlue', int(b * 255))
 
     def status_topic_callback(self, msg):
         """

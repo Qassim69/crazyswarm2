@@ -15,7 +15,7 @@ class Backend:
     def __init__(self, node: Node, names: list[str], states: list[State]):
         self.node = node
         self.names = names
-        self.clock_publisher = node.create_publisher(Clock, 'clock', 10)
+        self.clock_publisher = node.create_publisher(Clock, '/clock', 10)
         self.t = 0
         self.dt = 0.0005
 
@@ -48,13 +48,12 @@ class Backend:
     def shutdown(self):
         pass
 
-
 class Quadrotor:
     """Basic rigid body quadrotor model (no drag) using numpy and rowan."""
 
     def __init__(self, state):
         # parameters (Crazyflie 2.0 quadrotor)
-        self.mass = 0.034  # kg
+        self.mass = 0.029  # kg
         # self.J = np.array([
         # 	[16.56,0.83,0.71],
         # 	[0.83,16.66,1.8],
@@ -92,7 +91,7 @@ class Quadrotor:
             return np.maximum(force_in_newton, 0)
 
         force = rpm_to_force(action.rpm)
-
+        
         # compute next state
         eta = np.dot(self.B0, force)
         f_u = np.array([0, 0, eta[0]])
