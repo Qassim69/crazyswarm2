@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 
 """
@@ -13,7 +14,6 @@ import rowan
 
 from . import sim_data_types
 
-
 class TrajectoryPolynomialPiece:
 
     def __init__(self, poly_x, poly_y, poly_z, poly_yaw, duration):
@@ -23,10 +23,8 @@ class TrajectoryPolynomialPiece:
         self.poly_yaw = poly_yaw
         self.duration = duration
 
-
 def copy_svec(v):
     return firm.mkvec(v.x, v.y, v.z)
-
 
 class CrazyflieSIL:
 
@@ -105,21 +103,13 @@ class CrazyflieSIL:
         if self._isGroup(groupMask):
             self.mode = CrazyflieSIL.MODE_HIGH_POLY
             targetYaw = 0.0
-            firm.plan_takeoff(
-                self.planner,
-                self.cmdHl_pos,
-                self.cmdHl_yaw,
-                targetHeight, targetYaw, duration, self.time_func())
+            firm.plan_takeoff(self.planner, self.cmdHl_pos, self.cmdHl_yaw, targetHeight, targetYaw, duration, self.time_func())
 
     def land(self, targetHeight, duration, groupMask=0):
         if self._isGroup(groupMask):
             self.mode = CrazyflieSIL.MODE_HIGH_POLY
             targetYaw = 0.0
-            firm.plan_land(
-                self.planner,
-                self.cmdHl_pos,
-                self.cmdHl_yaw,
-                targetHeight, targetYaw, duration, self.time_func())
+            firm.plan_land(self.planner, self.cmdHl_pos, self.cmdHl_yaw, targetHeight, targetYaw, duration, self.time_func())
 
     # def stop(self, groupMask = 0):
     #     if self._isGroup(groupMask):
@@ -133,26 +123,13 @@ class CrazyflieSIL:
                 raise ValueError('goTo from low-level modes not yet supported.')
             self.mode = CrazyflieSIL.MODE_HIGH_POLY
             try:
-                firm.plan_go_to(
-                    self.planner,
-                    relative,
-                    False,
-                    firm.mkvec(*goal),
-                    yaw, duration, self.time_func())
+                firm.plan_go_to(self.planner, relative, False, firm.mkvec(*goal), yaw, duration, self.time_func())
             except TypeError:
-                message = ('Warning: Your Crazyflie firmware is outdated. '
-                           ' Please update to the latest version.')
+                message = ('Warning: Your Crazyflie firmware is outdated.' 'Please update to the latest version.')
                 print(message)
-                firm.plan_go_to(
-                    self.planner,
-                    relative,
-                    firm.mkvec(*goal),
-                    yaw, duration, self.time_func())
+                firm.plan_go_to(self.planner, relative, firm.mkvec(*goal), yaw, duration, self.time_func())
 
-    def uploadTrajectory(self,
-                         trajectoryId: int,
-                         pieceOffset: int,
-                         pieces: list[TrajectoryPolynomialPiece]):
+    def uploadTrajectory(self, trajectoryId: int, pieceOffset: int, pieces: list[TrajectoryPolynomialPiece]):
         traj = firm.piecewise_traj()
         traj.t_begin = 0
         traj.timescale = 1.0
@@ -216,21 +193,37 @@ class CrazyflieSIL:
         self.cmdHl_vel = copy_svec(self.setpoint.velocity)
         self.cmdHl_yaw = yaw
 
-    # def cmdPosition(self, pos, yaw = 0):
-    #     self.mode = CrazyflieSIL.MODE_LOW_POSITION
-    #     self.setState.pos = firm.mkvec(*pos)
-    #     self.setState.yaw = yaw
-    #     # TODO: should we set vel, acc, omega to zero, or rely on modes to not read them?
+    def cmdPosition(self, pos, yaw = 0):
+        self.mode = CrazyflieSIL.MODE_LOW_POSITION
+        self.setpoint.position.x = pos[0]
+        self.setpoint.position.y = pos[1]
+        self.setpoint.position.z = pos[2]
+        self.setpoint.attitude.yaw = np.degrees(yaw)
+        self.setpoint.mode.x = firm.modeAbs
+        self.setpoint.mode.y = firm.modeAbs
+        self.setpoint.mode.z = firm.modeAbs
+        self.setpoint.mode.yaw = firm.modeAbs
+        # TODO: should we set vel, acc, omega to zero, or rely on modes to not read them?
 
-    # def cmdVelocityWorld(self, vel, yawRate):
-    #     self.mode = CrazyflieSIL.MODE_LOW_VELOCITY
-    #     self.setState.vel = firm.mkvec(*vel)
-    #     self.setState.omega = firm.mkvec(0.0, 0.0, yawRate)
-    #     # TODO: should we set pos, acc, yaw to zero, or rely on modes to not read them?
+    def cmdVelocityWorld(self, vel, yawRate):
+        self.mode = CrazyflieSIL.MODE_LOW_VELOCITY
 
-    # def cmdStop(self):
-    #     # TODO: set mode to MODE_IDLE?
-    #     pass
+        self.setpoint.velocity.x = vel[0]
+        self.setpoint.velocity.y = vel[1]
+        self.setpoint.velocity.z = vel[2]
+        self.setpoint.attitudeRate.yaw = np.degrees(yawRate)
+        self.setpoint.mode.x = firm.modeVelocity
+        self.setpoint.mode.y = firm.modeVelocity
+        self.setpoint.mode.z = firm.modeVelocity
+        self.setpoint.mode.yaw = firm.modeVelocity
+        
+        self.setpoint.velocity_body = False
+        print(f"[{self.name}] VEL_CMD: vel=({vel[0]:.3f}, {vel[1]:.3f}, {vel[2]:.3f}), velocity_body={self.setpoint.velocity_body}")
+        # TODO: should we set pos, acc, yaw to zero, or rely on modes to not read them?
+
+    def cmdStop(self):
+        # TODO: set mode to MODE_IDLE?
+        pass
 
     def getSetpoint(self):
         if self.mode == CrazyflieSIL.MODE_HIGH_POLY:
@@ -261,6 +254,8 @@ class CrazyflieSIL:
                 self.cmdHl_pos = copy_svec(ev.pos)
                 self.cmdHl_vel = copy_svec(ev.vel)
                 self.cmdHl_yaw = ev.yaw
+                
+                return self._fwsetpoint_to_sim_data_types_state(self.setpoint)
 
         return self._fwsetpoint_to_sim_data_types_state(self.setpoint)
 
@@ -316,13 +311,7 @@ class CrazyflieSIL:
         if self.controller_name != 'mellinger':
             self.controller(self.control, self.setpoint, self.sensors, self.state, tick)
         else:
-            self.controller(
-                self.mellinger_control,
-                self.control,
-                self.setpoint,
-                self.sensors,
-                self.state,
-                tick)
+            self.controller(self.mellinger_control, self.control, self.setpoint, self.sensors, self.state, tick)
         return self._fwcontrol_to_sim_data_types_action()
 
     # 'private' methods
@@ -330,7 +319,6 @@ class CrazyflieSIL:
         return groupMask == 0 or (self.groupMask & groupMask) > 0
 
     def _fwcontrol_to_sim_data_types_action(self):
-
         firm.powerDistribution(self.control, self.motors_thrust_uncapped)
         firm.powerDistributionCap(self.motors_thrust_uncapped, self.motors_thrust_pwm)
 
