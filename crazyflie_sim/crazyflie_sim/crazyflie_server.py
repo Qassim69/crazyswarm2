@@ -138,7 +138,6 @@ class CrazyflieServer(Node):
             self.create_subscription(Hover,name + '/cmd_hover', partial(self._cmd_hover_changed, name=name),10)
             self.create_subscription(FullState,name + '/cmd_full_state', partial(self._cmd_full_state_changed, name=name),10)
             self.create_subscription(Position,name + '/cmd_position', partial(self._cmd_position_changed, name=name),10)
-            self.create_subscription(EmptyMsg,name + '/cmd_stop', partial(self._cmd_stop_changed, name=name),10)
 
         # Create services for the entire swarm and each individual crazyflie
         self.create_service(Takeoff, 'all/takeoff', self._takeoff_callback)
@@ -360,41 +359,6 @@ class CrazyflieServer(Node):
         yaw_rate = msg.yaw_rate
         # Forward to simulation backend
         self.cfs[name].cmdVelocityWorld(vel, yaw_rate)
-    
-    def _cmd_position_changed(self, msg, name=''):
-        '''
-        msg.x, msg.y, msg.z are floats for position
-        msg.yaw is float for orientation
-        '''
-        self.cfs[name].cmdPosition([msg.x, msg.y, msg.z], msg.yaw)
-
-    def _cmd_stop_changed(self, msg, name=''):
-        '''
-        Handle stop command from external nodes (e.g., crazyflie.py).
-        Args:
-            msg (std_msgs.msg.Empty): Empty trigger message (no data fields).
-            name (str): Crazyflie name (e.g., 'cf1').
-        '''
-        self.get_logger().info(f"[{name}] Received stop command")
-    
-        try:
-            if name in self.cfs:
-                # Forward to simulator backend
-                self.cfs[name].cmdStop()
-               
-                # Optional: Update visualization (e.g., remove LED)
-                marker = Marker()
-                marker.header.frame_id = name
-                marker.ns = "LED"
-                marker.id = int(name.replace("cf", ""))  # Extract ID from name
-                marker.action = Marker.DELETE
-                self.led_pub.publish(marker)
-        
-            else:
-                self.get_logger().warn(f"[{name}] Unknown drone, ignoring stop command")
-        
-        except Exception as e:
-            self.get_logger().error(f"[{name}] Error processing stop command: {str(e)}")
 
     def _cmd_hover_changed(self, msg, name=''):
         """
@@ -417,34 +381,11 @@ class CrazyflieServer(Node):
             [msg.acc.x, msg.acc.y, msg.acc.z],
             rpy[2],
             [msg.twist.angular.x, msg.twist.angular.y, msg.twist.angular.z])
-    
-    def update_led(self, name):
-        marker = Marker()
-        marker.header.frame_id = name
-        marker.ns = "LED"
-        marker.id = int(name.replace("cf", ""))  # Extract ID from name (e.g., cf1 → 1)
-        marker.type = Marker.SPHERE
-        marker.action = Marker.ADD
-        marker.scale.x = 0.3
-        marker.scale.y = 0.3
-        marker.scale.z = 0.3
-        marker.color.a = 0.2
 
-        # Check if LED parameters exist
-        red_param = f"{name}.ring.solidRed"
-        green_param = f"{name}.ring.solidGreen"
-        blue_param = f"{name}.ring.solidBlue"
-
-        if (self.has_parameter(red_param) and self.has_parameter(green_param) and self.has_parameter(blue_param)):
-            r = self.get_parameter(red_param).value
-            g = self.get_parameter(green_param).value
-            b = self.get_parameter(blue_param).value
-
-            marker.color.r = float(r)
-            marker.color.g = float(g)
-            marker.color.b = float(b)
-
-            self.led_pub.publish(marker)
+    def _cmd_position_changed(self, msg, name=''):
+        pos = [msg.x, msg.y, msg.z]
+        yaw = msg.yaw
+        self.cfs[name].cmdPosition(pos, yaw)
 
 def main(args=None):
 
