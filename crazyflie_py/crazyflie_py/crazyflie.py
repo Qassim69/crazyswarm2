@@ -14,9 +14,8 @@ from collections import defaultdict
 # from .visualizer import visNull
 
 
-from crazyflie_interfaces.msg import FullState, Position, Status, TrajectoryPolynomialPiece
-from crazyflie_interfaces.srv import Arm, GoTo, Land, \
-    NotifySetpointsStop, StartTrajectory, Takeoff, UploadTrajectory
+from crazyflie_interfaces.msg import FullState, Position, Status, TrajectoryPolynomialPiece, VelocityWorld
+from crazyflie_interfaces.srv import Arm, GoTo, Land, NotifySetpointsStop, StartTrajectory, Takeoff, UploadTrajectory
 from geometry_msgs.msg import Point, PoseStamped
 import numpy as np
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
@@ -156,7 +155,7 @@ class Crazyflie:
 
         self.armService = node.create_client(Arm, self.prefix + '/arm')
         if not self.armService.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
-            node.get_logger().warning(f"Arm service timeout for {prefix}")
+            node.get_logger().warning(f"Arm service timeout for {self.prefix}")
         # self.armService.wait_for_service(timeout_sec=10.0)
 
         # rospy.wait_for_service(prefix + '/stop')
@@ -194,7 +193,7 @@ class Crazyflie:
 
         self.cmdVelocityWorldPublisher = node.create_publisher(VelocityWorld, self.prefix + '/cmd_velocity_world', 1)
         self.cmdVelocityWorldMsg = VelocityWorld()
-        self.cmdVelocityWorldMsg.header.frame_id = 'map'
+        self.cmdVelocityWorldMsg.header.frame_id = '/world'
         # self.cmdVelocityWorldPublisher = rospy.Publisher(prefix + '/cmd_velocity_world', VelocityWorld, queue_size=1)
         # self.cmdVelocityWorldMsg = VelocityWorld()
         # self.cmdVelocityWorldMsg.header.seq = 0
@@ -687,14 +686,14 @@ class Crazyflie:
     #     self.cmdVelocityWorldMsg.yawRate = yawRate
     #     self.cmdVelocityWorldPublisher.publish(self.cmdVelocityWorldMsg)
 
-    def cmdStop(self):
-        """Interrupts any high-level command to stop and cut motor power.
+    # def cmdStop(self):
+    #     """Interrupts any high-level command to stop and cut motor power.
 
-        Intended for non-emergency scenarios, e.g. landing with the possibility
-        of taking off again later. Future low- or high-level commands will
-        restart the motors. Equivalent of :meth:`stop()` when in high-level mode.
-        """
-        self.cmdStopPublisher.publish(std_msgs.msg.Empty())
+    #     Intended for non-emergency scenarios, e.g. landing with the possibility
+    #     of taking off again later. Future low- or high-level commands will
+    #     restart the motors. Equivalent of :meth:`stop()` when in high-level mode.
+    #     """
+    #     self.cmdStopPublisher.publish(std_msgs.msg.Empty())
 
     # def cmdVel(self, roll, pitch, yawrate, thrust):
     #     """Sends a streaming command of the 'easy mode' manual control inputs.
@@ -754,28 +753,28 @@ class Crazyflie:
         self.cmdPositionMsg.yaw = yaw
         self.cmdPositionPublisher.publish(self.cmdPositionMsg)
 
-    def setLEDColor(self, r, g, b):
-        """Sets the color of the LED ring deck.
+    #def setLEDColor(self, r, g, b):
+    #    """Sets the color of the LED ring deck.
 
-        While most params (such as PID gains) only need to be set once, it is
-        common to change the LED ring color many times during a flight, e.g.
-        as some kind of status indicator. This method makes it convenient.
+    #    While most params (such as PID gains) only need to be set once, it is
+    #    common to change the LED ring color many times during a flight, e.g.
+    #    as some kind of status indicator. This method makes it convenient.
 
-        PRECONDITION: The param 'ring/effect' must be set to 7 (solid color)
-        for this command to have any effect. The default mode uses the ring
-        color to indicate radio connection quality.
+    #    PRECONDITION: The param 'ring/effect' must be set to 7 (solid color)
+    #    for this command to have any effect. The default mode uses the ring
+    #    color to indicate radio connection quality.
 
-        This is a blocking command, so it may cause stability problems for
-        large swarms and/or high-frequency changes.
+    #    This is a blocking command, so it may cause stability problems for
+    #    large swarms and/or high-frequency changes.
 
-        Args:
-            r (float): Red component of color, in range [0, 1].
-            g (float): Green component of color, in range [0, 1].
-            b (float): Blue component of color, in range [0, 1].
-        """
-        self.setParam('ring/solidRed', int(r * 255))
-        self.setParam('ring/solidGreen', int(g * 255))
-        self.setParam('ring/solidBlue', int(b * 255))
+    #    Args:
+    #        r (float): Red component of color, in range [0, 1].
+    #        g (float): Green component of color, in range [0, 1].
+    #        b (float): Blue component of color, in range [0, 1].
+    #    """
+    #    self.setParam('ring/solidRed', int(r * 255))
+    #    self.setParam('ring/solidGreen', int(g * 255))
+    #    self.setParam('ring/solidBlue', int(b * 255))
 
     def status_topic_callback(self, msg):
         """
