@@ -221,9 +221,9 @@ class CrazyflieSIL:
         print(f"[{self.name}] VEL_CMD: vel=({vel[0]:.3f}, {vel[1]:.3f}, {vel[2]:.3f}), velocity_body={self.setpoint.velocity_body}")
         # TODO: should we set pos, acc, yaw to zero, or rely on modes to not read them?
 
-    def cmdStop(self):
-        # TODO: set mode to MODE_IDLE?
-        pass
+    # def cmdStop(self):
+    #     # TODO: set mode to MODE_IDLE?
+    #     pass
 
     def getSetpoint(self):
         if self.mode == CrazyflieSIL.MODE_HIGH_POLY:
