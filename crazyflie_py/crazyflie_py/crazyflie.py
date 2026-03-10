@@ -518,7 +518,7 @@ class Crazyflie:
         """
         try:
             trans = self.tf_buffer.lookup_transform('map', self.tf_frame_name, rclpy.time.Time(),
-            timeout=rclpy.duration.Duration(seconds=1.0))
+            timeout=rclpy.duration.Duration(seconds=0.0))
             point = trans.transform.translation
             return np.array([point.x, point.y, point.z])
         except Exception as e:
